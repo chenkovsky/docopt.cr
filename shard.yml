@@ -1,7 +1,8 @@
 name: docopt
-version: 0.2.0
+version: 0.2.1
 
 authors:
-  - chenkovsky.chen <chenkov@yeah.net>
+  - chenkovsky.chen <chenkov@yeah.net> # Original author
+  - Roberto Alsina <roberto.alsina@gmail.com> # Minor fixes
 
 license: MIT

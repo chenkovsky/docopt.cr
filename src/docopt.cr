@@ -17,7 +17,8 @@ module Docopt
     end
   end
 
-  class Tokens < Array(String)
+  class Tokens
+    @internal : Array(String) = [] of String
     property :error
     @error : (DocoptExit.class | DocoptLanguageError.class)
 
@@ -25,13 +26,20 @@ module Docopt
       super()
     end
 
+    delegate :<<, to: @internal
+    delegate :[], to: @internal
+    delegate size, to: @internal
+    delegate delete_at, to: @internal
+    delegate join, to: @internal
+    delegate map, to: @internal
+
     def self.from_pattern(source : String) : Tokens
-      ret = Tokens.new (DocoptExit)
-      source.gsub(/([\[\]\(\)\|]|\.\.\.)/) { |s, m| " #{m[1]} " }.split.each do |tok|
+      ret = Tokens.new(DocoptExit)
+      source.gsub(/([\[\]\(\)\|]|\.\.\.)/) { |_, m| " #{m[1]} " }.split.each do |tok|
         ret << tok
       end
       ret.error = DocoptLanguageError
-      return ret
+      ret
     end
 
     def self.from_array(arr : Array(String)) : Tokens
@@ -39,7 +47,7 @@ module Docopt
       arr.each do |e|
         ret << e
       end
-      return ret
+      ret
     end
 
     def move : String | Nil
@@ -59,7 +67,7 @@ module Docopt
     end
 
     def ==(other : Pattern) : Bool
-      return to_s == other.to_s
+      to_s == other.to_s
     end
 
     def inspect(io)
@@ -67,13 +75,13 @@ module Docopt
     end
 
     def hash
-      return to_s.hash
+      to_s.hash
     end
 
     def fix : Pattern
       fix_identities
       fix_repeating_arguments
-      return self
+      self
     end
 
     def fix_identities(uniq = nil) : Pattern
@@ -94,7 +102,7 @@ module Docopt
           child.fix_identities(uniq_)
         end
       end
-      return self
+      self
     end
 
     def fix_repeating_arguments : Pattern
@@ -114,7 +122,7 @@ module Docopt
           end
         end
       end
-      return self
+      self
     end
 
     def either : Either
@@ -122,7 +130,7 @@ module Docopt
       groups = [[self.as Pattern]].as Array(Array(Pattern))
       while groups.size > 0
         children = groups.delete_at 0
-        types = children.map { |c| c.class }
+        types = children.map(&.class)
         if types.includes? Either
           either = children.select { |c| c.class == Either }[0].as Either
           children.delete_at(children.index(either).as Int32)
@@ -149,7 +157,7 @@ module Docopt
           result << children
         end
       end
-      return Either.new(result.map { |e| Required.new(e).as Pattern })
+      Either.new(result.map { |e| Required.new(e).as Pattern })
     end
 
     abstract def flat(*types)
@@ -170,14 +178,14 @@ module Docopt
     end
 
     def to_s
-      "#{self.class.to_s.split("::")[-1]}(#{@name.to_s}, #{@value.to_s})"
+      "#{self.class.to_s.split("::")[-1]}(#{@name}, #{@value})"
     end
 
     def flat(*types)
       if types.size == 0 || types.includes? self.class
         return [self.as Pattern]
       end
-      return [] of Pattern
+      [] of Pattern
     end
 
     def match(left : Array(Pattern), collected : (Nil | Array(Pattern)) = nil) : Tuple(Bool, Array(Pattern), Array(Pattern))
@@ -231,7 +239,7 @@ module Docopt
 
     def to_s
       children = @children.as Array(Pattern)
-      "#{self.class.to_s.split("::")[-1]}(#{children.map { |c| c.to_s }.join ", "})"
+      "#{self.class.to_s.split("::")[-1]}(#{children.map(&.to_s).join ", "})"
     end
 
     def flat(*types)
@@ -245,7 +253,7 @@ module Docopt
           ret << p
         end
       end
-      return ret
+      ret
     end
   end
 
@@ -272,7 +280,7 @@ module Docopt
       collected = [] of Pattern if collected.nil?
       ch = @children.as Array(Pattern)
       ch.each do |pat|
-        m, left, collected = pat.match(left, collected)
+        _, left, collected = pat.match(left, collected)
       end
       return true, left, collected
     end
@@ -298,7 +306,7 @@ module Docopt
       if m
         value = m[0]
       end
-      return typeof(self).new name, value
+      typeof(self).new name, value
     end
   end
 
@@ -360,7 +368,7 @@ module Docopt
         end
       end
       if outcomes.size > 0
-        return outcomes.min_by { |o| o[1].size }
+        return outcomes.min_by(&.[1].size)
       end
       return false, left, collected
     end
@@ -385,7 +393,7 @@ module Docopt
 
     def self.parse(option_description)
       short, long, argcount, value = nil, nil, 0, false
-      options, description = option_description.strip.split("  ", limit = 2)
+      options, description = option_description.strip.split("  ", limit: 2)
       options = options.gsub(',', ' ').gsub('=', ' ')
       options.split.each do |tok|
         if tok.starts_with? "--"
@@ -403,7 +411,7 @@ module Docopt
           value = nil
         end
       end
-      return Option.new short, long, argcount, value
+      Option.new short, long, argcount, value
     end
 
     def single_match(left)
@@ -416,22 +424,22 @@ module Docopt
     end
 
     def to_s
-      "Option(#{@short.to_s},#{@long.to_s},#{@argcount.to_s},#{@value.to_s})"
+      "Option(#{@short},#{@long},#{@argcount},#{@value})"
     end
   end
 
   def self.parse_section(name, source)
     ret = [] of String
-    source.scan /^([^\n]*#{name}[^\n]*\n?(?:[ \t].*?(?:\n|$))*)/im do |m|
+    source.scan /^([^\n]*#{name}[^\n]*\n?(?:[ \t].*?(?:\n|$))*)/im do |_|
       ret << $1.strip
     end
-    return ret
+    ret
   end
 
   def self.parse_defaults(doc) : Array(Option)
     defaults = [] of Option
     parse_section("options:", doc).each do |s|
-      _, s = s.split(':', limit = 2)
+      _, s = s.split(':', limit: 2)
       split = ("\n" + s).split /\n[ \t]*(-\S+?)/
       split = split[1, split.size]
       split.each_slice(2) do |x|
@@ -441,18 +449,18 @@ module Docopt
         end
       end
     end
-    return defaults
+    defaults
   end
 
   def self.formal_usage(section)
-    _, section = section.split(":", limit = 2)
+    _, section = section.split(":", limit: 2)
     pu = section.split
-    return "(" + pu[1, pu.size].map { |x| x == pu[0] ? ") | (" : x }.join(" ") + ")"
+    "(" + pu[1, pu.size].map { |x| x == pu[0] ? ") | (" : x }.join(" ") + ")"
   end
 
   def self.parse_long(tokens, options) : Array(Pattern)
     tok = tokens.move.as String
-    long_value = tok.split("=", limit = 2)
+    long_value = tok.split("=", limit: 2)
     long = long_value[0]
     raise "long pattern should start with '--'" if !long.starts_with? "--"
     value = long_value.size <= 1 ? nil : long_value[1]
@@ -461,7 +469,7 @@ module Docopt
       similar = options.select { |o| (o.long.as String).starts_with? long }
     end
     if similar.size > 1
-      raise tokens.error.new "#{long} is not a uniq prefix: #{similar.map { |s| s.long }.join(", ")}?"
+      raise tokens.error.new "#{long} is not a uniq prefix: #{similar.map(&.long).join(", ")}?"
     elsif similar.size < 1
       argcount = long_value.size > 1 ? 1 : 0
       o = Option.new nil, long, argcount
@@ -472,7 +480,7 @@ module Docopt
     else
       o = Option.new similar[0].short, similar[0].long, similar[0].argcount, similar[0].value
       if o.argcount == 0
-        raise tokens.error.new ("#{o.long} must not have an argument") if !value.nil?
+        raise tokens.error.new("#{o.long} must not have an argument") if !value.nil?
       else
         if value.nil?
           raise tokens.error.new "#{o.long} requires argument" if [nil, "--"].includes? tokens.current
@@ -483,7 +491,7 @@ module Docopt
         o.value = value.nil? ? true : value
       end
     end
-    return [o.as Pattern]
+    [o.as Pattern]
   end
 
   def self.parse_shorts(tokens, options) : Array(Pattern)
@@ -520,7 +528,7 @@ module Docopt
       end
       parsed << (o.as Pattern)
     end
-    return parsed
+    parsed
   end
 
   def self.parse_atom(tokens, options) : Array(Pattern)
@@ -532,25 +540,24 @@ module Docopt
       tokens.move
       result = Required.new parse_expr(tokens, options)
       raise "unmatched #{token}" if tokens.move != ")"
-      return [result.as Pattern]
+      [result.as Pattern]
     when "["
       tokens.move
-      matching = "]"
       result = Optional.new parse_expr(tokens, options)
       raise "unmatched #{token}" if tokens.move != "]"
-      return [result.as Pattern]
+      [result.as Pattern]
     when "options"
       tokens.move
-      return [AnyOptions.new([] of Pattern).as Pattern]
+      [AnyOptions.new([] of Pattern).as Pattern]
     else
       if token.starts_with?("--") && token != "--"
-        return parse_long(tokens, options)
+        parse_long(tokens, options)
       elsif token.starts_with?("-") && token != "--" && token != "-"
-        return parse_shorts(tokens, options)
+        parse_shorts(tokens, options)
       elsif token.starts_with?("<") && token.ends_with?(">") || token == token.upcase
-        return [Argument.new(tokens.move).as Pattern]
+        [Argument.new(tokens.move).as Pattern]
       else
-        return [Command.new(tokens.move).as Pattern]
+        [Command.new(tokens.move).as Pattern]
       end
     end
   end
@@ -565,7 +572,7 @@ module Docopt
       end
       result += atom
     end
-    return result
+    result
   end
 
   def self.parse_expr(tokens, options) : Array(Pattern)
@@ -580,14 +587,14 @@ module Docopt
       seq = parse_seq(tokens, options)
       result += seq.size > 1 ? [Required.new(seq).as Pattern] : seq
     end
-    return result.size > 1 ? [Either.new(result).as Pattern] : result
+    result.size > 1 ? [Either.new(result).as Pattern] : result
   end
 
   def self.parse_pattern(source, options)
     tokens = Tokens.from_pattern(source)
     result = parse_expr(tokens, options)
     raise "Unexpected ending: #{tokens.join " "}" if !tokens.current.nil?
-    return Required.new(result)
+    Required.new(result)
   end
 
   def self.parse_argv(tokens, options, options_first = false) : Array(Pattern)
@@ -611,7 +618,7 @@ module Docopt
         parsed << (Argument.new nil, tokens.move)
       end
     end
-    return parsed
+    parsed
   end
 
   def self.extras(help, version, options, doc)
@@ -659,7 +666,7 @@ module Docopt
     end
     raise DocoptExit.new
   rescue ex
-    if (exit)
+    if exit
       msg = ex.message
       if msg.is_a?(String) && msg.size > 0
         puts msg
